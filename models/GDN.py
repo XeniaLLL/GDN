@@ -111,7 +111,7 @@ class GDN(nn.Module):
         self.cache_edge_index_sets = [None] * edge_set_num
         self.cache_embed_index = None
 
-        self.dp = nn.Dropout(0.2)
+        self.dp = nn.Dropout(0.2) 
 
         self.init_params()
     
@@ -140,7 +140,7 @@ class GDN(nn.Module):
             
             batch_edge_index = self.cache_edge_index_sets[i]
             
-            all_embeddings = self.embedding(torch.arange(node_num).to(device)) #(node_num, embedding-dim), learnable with params
+            all_embeddings = self.embedding(torch.arange(node_num).to(device)) #(node_num, embedding-dim), learnable with params # ???TODO 这里指的是存在结点自己的信息用embedding 学了出来的
 
             weights_arr = all_embeddings.detach().clone()
             all_embeddings = all_embeddings.repeat(batch_num, 1) #　(node_num * batch_size, embedding-dim)
@@ -184,5 +184,5 @@ class GDN(nn.Module):
         out = out.view(-1, node_num)
    
 
-        return out
+        return out # todo: ? why unsupervised learning --> and how to implement? how does it work for testing?
         
