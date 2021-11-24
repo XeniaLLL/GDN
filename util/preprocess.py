@@ -64,7 +64,7 @@ def build_net(target, all_features):
     return edge_indexes, index_feature_map
 
 
-def construct_data(data, feature_map, labels=0):
+def construct_data(data, feature_map, labels=0):# data[1565, 27] [条数, 特征数], feature_map 指定要的特征集
     res = []
 
     for feature in feature_map:

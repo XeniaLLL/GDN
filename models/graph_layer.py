@@ -19,6 +19,7 @@ class GraphLayer(MessagePassing):
         self.concat = concat
         self.negative_slope = negative_slope
         self.dropout = dropout
+        self.node_dim=0
 
         self.__alpha__ = None
 

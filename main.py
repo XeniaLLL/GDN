@@ -27,7 +27,10 @@ from datetime import datetime
 import os
 import argparse
 from pathlib import Path
-
+PARENT_DIR = os.path.abspath(os.path.dirname(__file__))
+# PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+sys.path.append(PARENT_DIR)
+print("error")
 import matplotlib.pyplot as plt
 
 import json
@@ -43,19 +46,19 @@ class Main():
         dataset = self.env_config['dataset'] 
         train_orig = pd.read_csv(f'./data/{dataset}/train.csv', sep=',', index_col=0)
         test_orig = pd.read_csv(f'./data/{dataset}/test.csv', sep=',', index_col=0)
-       
+
         train, test = train_orig, test_orig
 
         if 'attack' in train.columns:
             train = train.drop(columns=['attack'])
 
-        feature_map = get_feature_map(dataset)
-        fc_struc = get_fc_graph_struc(dataset)
+        feature_map = get_feature_map(dataset) # len=28
+        fc_struc = get_fc_graph_struc(dataset) # dict, 27 elements
 
         set_device(env_config['device'])
         self.device = get_device()
 
-        fc_edge_index = build_loc_net(fc_struc, list(train.columns), feature_map=feature_map)
+        fc_edge_index = build_loc_net(fc_struc, list(train.columns), feature_map=feature_map) # 27 features with fully connected graph --> 26*27 edges
         fc_edge_index = torch.tensor(fc_edge_index, dtype = torch.long)
 
         self.feature_map = feature_map
@@ -68,12 +71,12 @@ class Main():
             'slide_win': train_config['slide_win'],
             'slide_stride': train_config['slide_stride'],
         }
-
+        # for training data: 1565 items --> with stride= 5 and slide_win=15, get only 1565//5=310 data in total, we get x: (data_num(310), features_num(27), sliede_win(15)),  y: (data_num(310), features_num(27))
         train_dataset = TimeDataset(train_dataset_indata, fc_edge_index, mode='train', config=cfg)
         test_dataset = TimeDataset(test_dataset_indata, fc_edge_index, mode='test', config=cfg)
 
 
-        train_dataloader, val_dataloader = self.get_loaders(train_dataset, train_config['seed'], train_config['batch'], val_ratio = train_config['val_ratio'])
+        train_dataloader, val_dataloader = self.get_loaders(train_dataset, train_config['seed'], train_config['batch'], val_ratio = train_config['val_ratio']) # val_ratio=0.1
 
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
@@ -204,7 +207,7 @@ if __name__ == "__main__":
     parser.add_argument('-dim', help='dimension', type = int, default=64)
     parser.add_argument('-slide_stride', help='slide_stride', type = int, default=5)
     parser.add_argument('-save_path_pattern', help='save path pattern', type = str, default='')
-    parser.add_argument('-dataset', help='wadi / swat', type = str, default='wadi')
+    parser.add_argument('-dataset', help='wadi / swat', type = str, default='msl')
     parser.add_argument('-device', help='cuda / cpu', type = str, default='cuda')
     parser.add_argument('-random_seed', help='random seed', type = int, default=0)
     parser.add_argument('-comment', help='experiment comment', type = str, default='')
@@ -229,7 +232,7 @@ if __name__ == "__main__":
 
 
     train_config = {
-        'batch': args.batch,
+        'batch': args.batch,  # batch size
         'epoch': args.epoch,
         'slide_win': args.slide_win,
         'dim': args.dim,

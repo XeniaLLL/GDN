@@ -12,14 +12,14 @@ import torch.nn.functional as F
 from .graph_layer import GraphLayer
 
 
-def get_batch_edge_index(org_edge_index, batch_num, node_num):
+def get_batch_edge_index(org_edge_index, batch_num, node_num):# [2,702], 27, 128
     # org_edge_index:(2, edge_num)
     edge_index = org_edge_index.clone().detach()
     edge_num = org_edge_index.shape[1]
-    batch_edge_index = edge_index.repeat(1,batch_num).contiguous()
+    batch_edge_index = edge_index.repeat(1, batch_num).contiguous() #重复batch次的意义是啥 ???
 
     for i in range(batch_num):
-        batch_edge_index[:, i*edge_num:(i+1)*edge_num] += i*node_num
+        batch_edge_index[:, i*edge_num:(i+1)*edge_num] += i*node_num# 类似于设置bucket给每个sample进行赋值,或者用进制思想理解
 
     return batch_edge_index.long()
 
@@ -121,49 +121,49 @@ class GDN(nn.Module):
 
     def forward(self, data, org_edge_index):
 
-        x = data.clone().detach()
-        edge_index_sets = self.edge_index_sets
+        x = data.clone().detach() # [128, 15, 27]
+        edge_index_sets = self.edge_index_sets  # [2,702]
 
         device = data.device
 
-        batch_num, node_num, all_feature = x.shape
-        x = x.view(-1, all_feature).contiguous()
+        batch_num, node_num, all_feature = x.shape  # [128, 15, 27]
+        x = x.view(-1, all_feature).contiguous() # [128*27, 15] 特征的维度不变,batch的和node 进行结合,通过contiguous函数转成连续操作的形式
 
 
         gcn_outs = []
-        for i, edge_index in enumerate(edge_index_sets):
-            edge_num = edge_index.shape[1]
+        for i, edge_index in enumerate(edge_index_sets): # 针对边的信息
+            edge_num = edge_index.shape[1] # Tensor records the location of each edges [i,j] thus [2,702] means 702 edges
             cache_edge_index = self.cache_edge_index_sets[i]
 
-            if cache_edge_index is None or cache_edge_index.shape[1] != edge_num*batch_num:
-                self.cache_edge_index_sets[i] = get_batch_edge_index(edge_index, batch_num, node_num).to(device)
+            if cache_edge_index is None or cache_edge_index.shape[1] != edge_num*batch_num: # condition 1: cache 不是空的, condition 2: 存储的边信息还没有达到最大的边* batch的内容
+                self.cache_edge_index_sets[i] = get_batch_edge_index(edge_index, batch_num, node_num).to(device) #用bukect 赋值的形式给他赋值之后的东西
             
             batch_edge_index = self.cache_edge_index_sets[i]
             
-            all_embeddings = self.embedding(torch.arange(node_num).to(device))
+            all_embeddings = self.embedding(torch.arange(node_num).to(device)) #(node_num, embedding-dim), learnable with params
 
             weights_arr = all_embeddings.detach().clone()
-            all_embeddings = all_embeddings.repeat(batch_num, 1)
+            all_embeddings = all_embeddings.repeat(batch_num, 1) #　(node_num * batch_size, embedding-dim)
 
             weights = weights_arr.view(node_num, -1)
 
-            cos_ji_mat = torch.matmul(weights, weights.T)
+            cos_ji_mat = torch.matmul(weights, weights.T) # embeding -> weight -> cos
             normed_mat = torch.matmul(weights.norm(dim=-1).view(-1,1), weights.norm(dim=-1).view(1,-1))
-            cos_ji_mat = cos_ji_mat / normed_mat
+            cos_ji_mat = cos_ji_mat / normed_mat # additional normalization
 
             dim = weights.shape[-1]
             topk_num = self.topk
 
-            topk_indices_ji = torch.topk(cos_ji_mat, topk_num, dim=-1)[1]
+            topk_indices_ji = torch.topk(cos_ji_mat, topk_num, dim=-1)[1] # topk related nodes indices (node-num, topk)
 
             self.learned_graph = topk_indices_ji
 
-            gated_i = torch.arange(0, node_num).T.unsqueeze(1).repeat(1, topk_num).flatten().to(device).unsqueeze(0)
-            gated_j = topk_indices_ji.flatten().unsqueeze(0)
-            gated_edge_index = torch.cat((gated_j, gated_i), dim=0)
+            gated_i = torch.arange(0, node_num).T.unsqueeze(1).repeat(1, topk_num).flatten().to(device).unsqueeze(0) # 针对每个结点扩展topk然后flattern 拉长
+            gated_j = topk_indices_ji.flatten().unsqueeze(0) # 将根据top k cos val 算出来的也拉长
+            gated_edge_index = torch.cat((gated_j, gated_i), dim=0) # ij 都存在则说明这个是边
 
-            batch_gated_edge_index = get_batch_edge_index(gated_edge_index, batch_num, node_num).to(device)
-            gcn_out = self.gnn_layers[i](x, batch_gated_edge_index, node_num=node_num*batch_num, embedding=all_embeddings)
+            batch_gated_edge_index = get_batch_edge_index(gated_edge_index, batch_num, node_num).to(device) #对于新算出来的图重新找batch;这里还是不太透彻的, rethink
+            gcn_out = self.gnn_layers[i](x, batch_gated_edge_index, node_num=node_num*batch_num, embedding=all_embeddings) # 针对每个图自己的gnn_layer,这个batch做的事情是把数据进行batch的利用不是对整个图进行子图划分啊啊啊啊
 
             
             gcn_outs.append(gcn_out)
